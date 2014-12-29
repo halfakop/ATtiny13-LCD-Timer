@@ -3,6 +3,9 @@
 
 #include <inttypes.h>
 
+// размер очереди таймеров
+#define QUEUE_SIZE 3
+
 // указатель на выполняемую задачу
 typedef void (*TPTR)(void);
 
@@ -13,16 +16,15 @@ typedef struct {
 } QITEM;
 
 // определяем типы задач
-typedef enum {BUTTON_THREAD, DISPLAY_THREAD, TIMER_THREAD} TASKS;
+typedef enum {
+    BUTTON_THREAD, 
+    DISPLAY_THREAD, 
+    TIMER_THREAD
+} TASKS;
 
-// размер очереди таймеров
-#define QUEUE_SIZE 3
-
-void task_manager(void);
-
+// функции "операционной системы"
 extern void task_assign(TASKS type, TPTR task, uint16_t value);
-
-extern void rtos_init(void);
 extern void rtos_run(void);
+extern void task_manager(void);
 
 #endif

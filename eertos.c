@@ -1,21 +1,19 @@
 #include <avr/interrupt.h>
 #include "eertos.h"
 
-// очередь таймеров
-volatile QITEM queue[QUEUE_SIZE];
+
+volatile QITEM queue[QUEUE_SIZE]; // очередь таймеров
 
 
 // установка задачи по таймеру
 void task_assign(TASKS type, TPTR task, uint16_t time) {
   QITEM *p = (QITEM *) &queue[type];
-  // иначе ищем первый пустой слот и заполняем его
   p->task = task;
-  p->time = time;
-  p->init = time;
+  p->time = p->init = time;
 }
 
 
-// диспетчер задач, проверяет задачи в очереди, если находит реальную
+// диспетчер задач, проверяет задачи в очереди, если находит
 // задачу, у которой счётчик дошёл до нуля, то выполняет её
 inline void task_manager(void) {
   cli();

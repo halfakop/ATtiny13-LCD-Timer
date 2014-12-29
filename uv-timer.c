@@ -3,7 +3,7 @@
 
 #define BITS                8 // количество бит в байте :)
 #define HALFBYTE            4
-#define DIGITS              4 // количество отображаемых символов
+#define DIGITS              3 // количество отображаемых символов
 #define BIT_DATA            PB0
 #define BIT_CLOCK           PB1
 #define BIT_LATCH           PB2
@@ -15,21 +15,29 @@
 #define FREQ_LCD            1
 #define FREQ_TIMER          50
 
+
+// возможные состояния кнопок: не нажата, нажата MODE, нажата SET
 typedef enum {CLEAR, MODE, SET} BUTTON;
+// возможные состояния приложения, см. главный цикл
 typedef enum {M_LOW, S_HIGH, S_LOW, IDLE, READY, RUN, PAUSE} STATE;
+
+// вспомогательная структура для настройки стартового значения таймера
 typedef struct { 
   uint8_t multiplier; 
   uint8_t limit; 
 } PAIR;
 
+// список настроек для состояний M_LOW, S_HIGH и S_LOW
 const PAIR g_data[] = {{60, 9}, {10, 5}, {1, 9}};
+// шрифт для 7-ми сегментного индикатора: 0123456789
 const uint8_t digits[] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 
                           0x6D, 0x7D, 0x07, 0x7F, 0x6F};
 
-volatile BUTTON g_button = CLEAR; // инфа о нажатой кнопке
-volatile uint16_t g_seconds = 0;   // счётчик таймера
+// глобальные переменные
+volatile BUTTON g_button = CLEAR;   // инфа о нажатой кнопке
+volatile uint16_t g_seconds = 0;    // счётчик таймера
+volatile STATE g_state = IDLE;      // состояние приложения
 
-STATE g_state = IDLE;
 
 // определения функций
 void timer_setup(STATE new_state);
@@ -46,21 +54,32 @@ inline void task_display(void) {
   min = g_seconds / 60;
   sec = g_seconds % 60;
   if (last != g_seconds) {
-    buf[0] = digits[min>>HALFBYTE];
-    buf[1] = digits[min&0x0F];
-    buf[2] = digits[sec>>HALFBYTE];
-    buf[3] = digits[sec&0x0F];
+    buf[0] = digits[min&0x0F];
+    buf[1] = digits[sec>>HALFBYTE];
+    buf[2] = digits[sec&0x0F];
     // мигаем точкой ежесекундно
     if (g_seconds % 2) buf[1] | 0x80;
     // запоминаем
     last = g_seconds;
+
+    // прячем ненужные цифры в режимах настройки
+    switch (g_state) {
+    case M_LOW:
+      buf[2] = buf[3] = 0;
+      break;
+    case S_HIGH:
+      buf[1] = buf[3] = 0;
+      break;
+    case S_LOW:
+      buf[1] = buf[2] = 0;
+      break;
+    }
   }
 
   // инвертируем биты каждый раз из-за особенности работы ЖКИ
   buf[0] = ~buf[0];
   buf[1] = ~buf[1];
   buf[2] = ~buf[2];
-  buf[3] = ~buf[3];
   
   // выводим побитно софтовый буфер в буфер 4094
   for (uint8_t i=0; i<DIGITS; i++) {
@@ -68,13 +87,19 @@ inline void task_display(void) {
     for (uint8_t j=0; j<BITS; j++) {
       PORTB &= ~(1<<BIT_DATA);
       PORTB |= (byte>>(7-j)) & (1<<BIT_DATA);
+      asm("nop");
+      asm("nop");
       PORTB |= (1<<BIT_CLOCK);
+      asm("nop");
+      asm("nop");
       PORTB &= ~(1<<BIT_CLOCK);
     }
   }
 
   // применяем буфер, т.е. выводим данные на экран
   PORTB |= (1<<BIT_LATCH);
+  asm("nop");
+  asm("nop");
   PORTB &= ~(1<<BIT_LATCH);
 }
 
@@ -119,7 +144,9 @@ inline void task_buttons(void) {
 // Функция для настройки стартового значения таймера.
 void timer_setup(STATE state) {
   static uint8_t value = 0;
-  PAIR *d = (PAIR *) &g_data[state]; // позволяет жутко сэкономить флеш
+
+  PAIR *d = (PAIR *) &g_data[state];
+
   switch (g_button) {
   case MODE:
     g_seconds += value * d->multiplier;
